@@ -4,8 +4,6 @@ output:
     fig_caption: yes
     toc: true
     toc_depth: 2
-    includes:
-      in-header: tex.config.text
 toc-title: "Inhoudsopgave"
 classoption: landscape
   
@@ -478,8 +476,7 @@ ggplot(ziekenhuis_en_rna[ziekenhuis_en_rna$week >= jaar_terug,])+
 
 \newpage
 
-## Ziekenhuisopnames: Landkaart incidentie afgelopen 4 weken
-
+# Ziekenhuisopnames: Landkaart incidentie afgelopen 4 weken
 
 ```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap=paste("Incidentie ziekenhuisopnames per gemeente in", veiligheidsregio ,"in de afgelopen 4 weken."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
 
@@ -514,7 +511,7 @@ incidentie_ziekenhuisopames_gemeente_recent <- ziekenhuisopnames_per_gemeente_in
               panel.label.fontface = "bold",
               panel.label.size = 2,
               panel.label.color = "#FFFFFF",
-              panel.label.bg.color = "#53617F"
+              panel.label.bg.color = kleuren_ggd[2]
               
               )
 
