@@ -1,0 +1,521 @@
+---
+output: 
+  pdf_document:
+    fig_caption: yes
+    toc: true
+    toc_depth: 2
+    includes:
+      in-header: tex.config.text
+toc-title: "Inhoudsopgave"
+classoption: landscape
+  
+---
+
+```{r setup, include=FALSE}
+
+## Rioolwatersurveillance Covid-19 & vergelijking met ziekenhuiscijfers per Veiligheidsregio
+
+## auteur script: Pieter Seinen (PS, GGD Gelderland Zuid)
+## met bijdragen van Leonard van Brabant (LvB, GGD HvB)  
+
+
+# In dit script worden RIVM gegevens opgehaald mbt RNA deeltjes corona in RWZI
+# Script bevat code om gegevens op kaartjes Gemeente en VR te analyseren. 
+# Het is RWZI-gegevens naar pc-4 niveau om te rekenen. Dat wordt hier niet gedaan.
+
+# We volgen voor een het omrekenen naar regio de rekenmethode van het RIVM; deze wordt hier uitgelegd:
+# https://www.rivm.nl/documenten/berekening-cijfers-rioolwatermetingen-covid-19
+
+# Alle benodigde databronnen kunnen IN het script gedownload worden 
+
+#Voer hier een veiligheidsregio in 
+ veiligheidsregio = "Gelderland-Zuid" 
+
+# unique(gemeente_vr_cbs$vr_naam)
+#  [1] "Drenthe"                   "Amsterdam-Amstelland"      "Noord- en Oost-Gelderland" "Fryslân"                   "Zuid-Holland-Zuid"         "Rotterdam-Rijnmond"       
+#  [7] "Noord-Holland-Noord"       "Twente"                    "Flevoland"                 "Hollands-Midden"           "Midden- en West-Brabant"   "Utrecht"                  
+# [13] "Groningen"                 "Gelderland-Midden"         "Brabant-Zuidoost"          "Limburg-Zuid"              "Zaanstreek-Waterland"      "Limburg-Noord"            
+# [19] "Gelderland-Zuid"           "Brabant-Noord"             "Kennemerland"              "Gooi en Vechtstreek"       "Zeeland"                   "IJsselland"               
+# [25] "Haaglanden"  
+
+#Huisstijlkleuren
+ kleuren_ggd <- c("GZ-Blauw" = "#1A2C54",
+                  "GZ-Blauw_75" = "#53617F",
+                  "Accent" = "#EA6621",
+                  "GZ-Geel" = "#FEC80F")
+
+
+#1: Opties/Libraries/hulpfuncties
+  #Opties
+    #Lokalisatie NL
+    Sys.setlocale("LC_TIME", "Dutch")
+
+    #str als chr inlezen
+    options(stringsAsFactors = F)
+    
+  #Libraries
+    library(tidyverse)
+    library(lubridate)
+    library(tmap)
+    library(imputeTS)
+    library(openxlsx)
+    library(cbsodataR)
+  
+  #Hulpfuncties
+  #Functie om datum uit te schrijven
+  datum_uitschrijven <- function(x = Sys.Date(), afkorten = F){
+    
+    paste(day(x),month(x, label = T, abbr = afkorten), year(x))  
+  }
+  
+  #LvB verwijder characters van string en maak hem numeriek
+  to_number <- function(codes) {
+    return(as.numeric(sub("[a-zA-Z]+", "", codes)))
+  }
+
+  #Maandag van vorige week vastleggen o.b.v. sys.Date()-7
+  vorige_week <- floor_date(Sys.Date()-7,"week", week_start = getOption("lubridate.week.start",1))
+
+#2: Gegevens lezen
+    
+  
+    #Shapefile gemeenten inlezen
+      if(!file.exists("gemeente_sf.shp")){
+        
+        #Als shapefile nog niet lokaal is; downloaden van CBS
+        download.file("https://download.cbs.nl/geo/cbsgebiedsindelingen_2022_v1.zip", destfile = "cbs_gebiedsindelingen.zip")
+        unzip("cbs_gebiedsindelingen.zip")
+        
+        gemeente_sf <- sf::st_read("cbsgebiedsindelingen_2022_v1.gpkg", layer = "cbs_gemeente_2021_gegeneraliseerd")
+        #Shapefile gemeenteniveau opslaan
+        sf::st_write(gemeente_sf,"gemeente_sf.shp")
+        }else{
+          
+        gemeente_sf <- sf::st_read("gemeente_sf.shp")  
+        }
+  
+    #Inwoners per gemeente ophalen van CBS
+    #NB: Op moment van schrijven (20/07/2022) zijn inwonersaantallen voor 2021 compleet. Voor 2022 niet. Dit kan later aangepast worden 
+    inwoners_per_gemeente <- cbs_get_data(id = "70072NED", Perioden = "2021JJ00", select = c("Perioden","RegioS", "TotaleBevolking_1")) %>%
+      cbs_add_label_columns()%>%
+      #Alleen gemeentecijfers bewaren
+      dplyr::filter(str_detect(RegioS,"GM"))%>%
+      dplyr::select(RegioS_label,TotaleBevolking_1)
+      
+    
+    colnames(inwoners_per_gemeente) <- c("gemeente","inwoners")
+
+    #Ziekenhuisopnames RIVM
+      ziekenhuisopnames <- read.csv("https://data.rivm.nl/covid-19/COVID-19_ziekenhuisopnames.csv",";", header = T)%>%
+        mutate(week = floor_date(as.Date(Date_of_statistics), "week" , week_start=getOption("lubridate.week.start",1)),
+                gemeente = Municipality_name)
+      
+      ziekenhuisopnames_per_gemeente_incidentie_per_week <- ziekenhuisopnames%>%
+        group_by(week, gemeente)%>%
+        summarise(aantal = sum(Hospital_admission)) %>%
+        ungroup()%>%
+        left_join(inwoners_per_gemeente, by = "gemeente")%>%
+        #Incidentie_uitrekenen (per 100.000 inwoners)
+        mutate(incidentie = aantal/inwoners*1e5)
+ 
+
+
+    #Rioolwaterdata RIVM
+      #RWZI gegevens downloaden van RIVM & gemiddelde RNA-waarden per RWZI per week uitrekenen
+      rioolwater_per_week <- read.csv("https://data.rivm.nl/covid-19/COVID-19_rioolwaterdata.csv", sep = ";") %>%
+        #Maak variabele 'week'; datum van 1e dag van de week waarin gegevens zijn gemeten
+        mutate(week = floor_date(as.Date(Date_measurement),
+                               "week",week_start=getOption("lubridate.week.start", 1)))%>%
+        group_by(week, RWZI_AWZI_code)%>%
+        #Neem weekgem. per station 
+        summarise(RNA_flow_per_100000 = mean(RNA_flow_per_100000, na.rm = T))%>%
+        ungroup()
+      
+      #Rename RWZI_code t.b.v. merge met CBS-gegevens inwoners per verzorgingsgebied.
+      colnames(rioolwater_per_week)[colnames(rioolwater_per_week) == "RWZI_AWZI_code"] <- "rwzi_code"
+      
+      #Het kan voorkomen dat er in een week geen metingen van een RWZI zijn geregistreerd.  
+      #T/m juni 2021 zijn er erg veel missings. Hierna ontbreken slechts sporadisch gegevens. 
+      
+      # gegevens op rwzi-week niveau die ontbreken kunnen we imputeren.
+      # Hiervoor is het nodig om rijen te hebben van iedere combinatie weeknummer en RWZI
+      
+      #Vector met alle weken in periode waar data van is maken
+      weken <- seq(min(rioolwater_per_week$week),
+                   max(rioolwater_per_week$week), by = "weeks" )
+      
+      rwzis <- unique(rioolwater_per_week$rwzi_code)
+      
+      
+      rwzis_weken <- expand.grid(weken,rwzis)
+      
+      colnames(rwzis_weken) <- c("week", "rwzi_code")
+      
+      
+      # Combinaties van week en RWZI die nog niet in de data bestaan aanvullen met rwzis_weken
+      rioolwater_per_week <- rioolwater_per_week %>% 
+        full_join(rwzis_weken, by=c("rwzi_code", "week")) %>%
+        mutate(is_echt = !is.na(RNA_flow_per_100000)) %>%
+        group_by(rwzi_code) %>%
+        arrange(week) %>%
+        #Missing gegevens aanvullen
+        #Op basis van simulatie is simple ma de beste imputatiemethode
+        mutate(rna = imputeTS::na_ma(RNA_flow_per_100000, k = 2, weighting = "simple")) %>%
+        dplyr::select(-RNA_flow_per_100000)
+      
+            
+      #Inwoners per verzorgingsgebied RWZI downloaden van CBS
+      
+      #Let op! gegevens van 2021 worden gedownload. Op moment van schrijven zijn dit de meest actuele gegevens. 
+      #Moet bijgewerkt worden wanneer CBS gegevens bijwerkt worden. 
+      if(!file.exists("Inwoners_per_verzorgingsgebied.xlsx")){
+        download.file("https://www.cbs.nl/-/media/_excel/2021/39/20210930-aantal-inwoners-per-verzorgingsgebied-2021.xlsx",
+                      destfile = "Inwoners_per_verzorgingsgebied.xlsx",
+                      mode = "wb")
+      }
+      
+      #Het CBS bestand bevat twee tabbladen met data: Tabel 1 en Tabel 2. 
+      
+      #Tabel 1 bevat gegevens op het niveau van  Gemeente en Veiligheidsregio
+      #Tabel 2 bevat gegevens op PC4 niveau.
+      #Hieronder worden de gegevens mbt RNA flow alleen op Gemeente en VR-niveau gekoppelt.
+      
+      #Opmerking bij gegevens PC4:
+      #De gegevens in Tabel 2 zijn niet volledig (niet alle PC4 zijn aanwezig / of hebben een gekoppelde RWZI)
+
+      #Gegevens op gemeente en VR-niveau
+      inwoners_per_rwzi_gemeente_en_vr <- openxlsx::read.xlsx("Inwoners_per_verzorgingsgebied.xlsx", sheet = "Tabel 1") %>% 
+        #Als einddatum NA is, zijn de gegevens actueel.
+        dplyr::filter(is.na(einddatum)) 
+      
+      
+      rna_per_gemeente_en_vr <- inwoners_per_rwzi_gemeente_en_vr %>%
+        #Filters:
+        #Als aandeel NA / 0  is; heeft het geen zin telling mee te nemen.
+        #RWZI-code 49999 Is schiphol; geen gegevens 
+        dplyr::filter(!is.na(aandeel),
+                      aandeel > 0.000,
+                      rwzi_code != 49999)%>%
+        
+        #Hoeveel inwoners die gebruik maken  van RWZI  horen bij regio? (inwoners door rwzi bediend * aandeel gemeente bij rwzi)
+        mutate(inwoners_gemeente_per_rwzi = round(inwoners * aandeel),
+               rwzi_code = as.integer(rwzi_code))%>%
+        #join met rioolwaterdata obv rwzi_code
+        left_join(rioolwater_per_week, by = "rwzi_code") %>%
+        #Rna per bewoner uitrekenen
+        mutate(rna_per_bewoner = rna / 1e5)%>%
+        #Hoeveel is dat per rwzi per regio (rna_per_bewoner * inwoners regio (die bij rwzi horen))
+        mutate(rna_rwzi_gemeente = inwoners_gemeente_per_rwzi * rna_per_bewoner) %>%
+        #Groeperen op regio zodat er rowSums gemaakt kunnen worden
+        group_by(regio_code, week)%>%
+        #Som het aantal inwoners van gemeente & aantal RNA per rwzi/gemeente bij elkaar op
+        mutate(aantal_mensen = sum(inwoners_gemeente_per_rwzi),
+               aantal_rna = sum(rna_rwzi_gemeente),
+               #Ook percentage geimputeerde gegevens uitrekenen
+               percentage_geimputeerd = round(sum(ifelse(is_echt, 0, (inwoners_gemeente_per_rwzi/aantal_mensen)*100))))%>%
+        ungroup()%>%
+        # * 100000 om op rna flow per 100.0000 uit te komen
+        mutate(rna = aantal_rna/aantal_mensen * 1e5) %>%
+        #Opschonen; 1 rij per gemeente
+         mutate(regio_week = paste(regio_code, week)) %>%
+         distinct(regio_week, .keep_all = T) %>%
+         dplyr::select(-regio_week)
+      
+      #Dataset splitsen tussen veiligheidsregio en gemeeente
+      rna_per_vr <- rna_per_gemeente_en_vr[rna_per_gemeente_en_vr$regio_type == "VR",] %>%
+        #VR id numeriek maken
+        mutate(regio_code = as.numeric(str_extract(regio_code,"[:digit:]{2}")))%>%
+        #Alleen relevante variabelen behouden
+        dplyr::select(regio_code, week, rna, percentage_geimputeerd)
+      
+      rna_per_gemeente <- rna_per_gemeente_en_vr[rna_per_gemeente_en_vr$regio_type == "GM",] %>%
+        dplyr::select(regio_code,regio_naam, week,rna,percentage_geimputeerd)
+
+      #Berekenen rna per 100.000 voor heel NL
+      rna_nl <- rna_per_gemeente_en_vr %>%
+        filter(regio_type == "VR") %>%
+        #Percentage geimputeerd terugrekenen naar aantal mensen met geimputeerde data
+        mutate(mensen_geimputeerd = (percentage_geimputeerd/100) * aantal_mensen) %>%
+        group_by(week)%>%
+        summarise(aantal_mensen = sum(aantal_mensen),
+                  aantal_rna = sum(aantal_rna),
+                  percentage_geimputeerd = round(sum(mensen_geimputeerd / aantal_mensen * 100))
+                  )%>%
+        ungroup()%>%
+        mutate(rna = aantal_rna/aantal_mensen * 1e5) %>%
+        dplyr::select(week,rna,percentage_geimputeerd)
+      
+
+      
+      if(!file.exists("gemeente_vr_cbs.csv")){
+          #Koppeltabel VR & gemeente van cbs ophalen met cbsodataR
+          library(cbsodataR)
+          
+          gemeente_vr_cbs <- cbs_get_data(catalog = "CBS", id = "84721NED", select = c("Code_1", "Naam_2","Code_44","Naam_45")) %>%
+            #cbs-gegevens hebben vaak een hele hoop onnodige spaties; verwijderen
+             mutate_if(is.character, str_trim, side = "both")
+            
+          colnames(gemeente_vr_cbs) <- c("gm_code","gm_naam","vr_code","vr_naam")
+          #wegschrijven naar lokale werkmap. 
+          write.csv(gemeente_vr_cbs, "gemeente_vr_cbs.csv", row.names = F)
+          }else{
+          gemeente_vr_cbs  <- read.csv("gemeente_vr_cbs.csv")
+            
+          }
+          
+
+          #DF met alle gemeentenamen en code's voor VR
+          gemeenten_in_vr <- gemeente_vr_cbs[gemeente_vr_cbs$vr_naam == veiligheidsregio,] %>%
+            dplyr::select(gm_code,gm_naam) %>%
+            mutate(code_numeriek = to_number(gm_code))
+          
+          #Shapefile filteren op gemeenten in VR
+          gemeente_in_vr_sf <- gemeente_sf %>% dplyr::filter(statnaam %in% gemeenten_in_vr$gm_naam)
+          #RNA gegevens filteren op gemeenten in VR
+          rna_per_gemeente_in_vr <- rna_per_gemeente[rna_per_gemeente$regio_code %in% gemeenten_in_vr$gm_code,]
+          
+          
+
+
+
+
+
+
+```
+
+---
+title: "Rioolwatersurveillance in `r veiligheidsregio`"
+---
+
+
+\newpage
+
+# Rioolwater: Landkaart RNA-deeltjes per gemeente
+```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap=paste0("RNA-deeltjes in rioolwater (per 100.000 inwoners * honderd miljard) in ", veiligheidsregio,",per gemeente in de laatste 4 weken."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
+
+#Breaks zijn gebaseerd op percentielen van data van alle gemeenten in NL vanaf jan-2021
+percentielen <- c(0,round(quantile(rna_per_gemeente$rna[rna_per_gemeente$week >= "01-01-2021"]/1e11,
+                         c(0.2,0.4,0.6,0.8, 0.9))),Inf)
+
+labels_percentielen <- lapply(1:6, function(x){
+  eerste_deel <- ifelse(x == 1, percentielen[x], percentielen[x]+1)
+  tweede_deel <- ifelse(x == 6, "+", paste(" t/m",percentielen[x+1]))
+  str_c(eerste_deel,tweede_deel)}) 
+
+labels_percentielen <- do.call(rbind, labels_percentielen) %>% as.vector()
+
+
+  #Laatste 4-weken van rna-deeltjes per gemeente pivotten naar breed (elke week is een variabele)
+  laatste_vier_weken <- unique(rna_per_gemeente_in_vr$week[rna_per_gemeente_in_vr$week >= (vorige_week-21)])
+
+  rna_per_gemeente_recent <- rna_per_gemeente_in_vr[rna_per_gemeente_in_vr$week %in% laatste_vier_weken,]%>%
+  mutate(rna = rna/1e11)%>%
+    tidyr::pivot_wider(id_cols = regio_code, values_from = rna, names_from = week) 
+
+
+  #Polygoon en data mergen
+  kaart_rioolwater <- merge(x = gemeente_in_vr_sf,
+                        y = rna_per_gemeente_recent,
+                        by.x = "statcode", 
+                        by.y = "regio_code")
+  
+  
+  tm_shape(kaart_rioolwater) +
+    tm_fill(col = paste(laatste_vier_weken),
+            breaks = percentielen,
+            labels = labels_percentielen,
+            title = "Rioolwater: RNA-deeltjes Covid-19 per 100.000 inwoners (*100 miljard)",
+            legend.is.portrait = F)+
+    tm_borders() +
+    tm_facets(nrow = 2, free.scales = FALSE) +
+    tm_layout(# legend.outside = TRUE,
+              legend.outside.position = "bottom",
+              legend.outside.size = 0.15,
+              legend.text.size = 5,
+              legend.title.size = 20,
+              legend.title.fontface = "bold",
+              panel.labels =  c(laatste_vier_weken),
+              panel.label.fontface = "bold",
+              panel.label.size = 2,
+              panel.label.color = "#FFFFFF",
+              panel.label.bg.color = kleuren_ggd[2]
+              )
+
+```
+
+\newpage
+
+# Rioolwater: RNA-deeltjes over tijd in Nederland, `r veiligheidsregio` en andere veiligheidsregios 
+
+```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap= paste("RNA-deeltjes Covid 19 in rioolwater over tijd voor Nederland (oranje),", veiligheidsregio,"(blauw) en andere veiligheidsregio's (gele stippen)."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
+
+
+jaar_terug <- vorige_week-365
+
+regio_code_vr <- unique(to_number(gemeente_vr_cbs$vr_code[gemeente_vr_cbs$vr_naam == veiligheidsregio]))
+
+legenda_lijngrafiek <- c(kleuren_ggd[3],kleuren_ggd[1],kleuren_ggd[4])
+names(legenda_lijngrafiek) <- c("Nederland", paste(veiligheidsregio),"Andere veiligheidsregio's")
+
+#Lijngrafiek met gegevens voor NL, Gelderland-zuid 
+ggplot()+
+    geom_point(data = rna_per_vr[rna_per_vr$regio_code != regio_code_vr & 
+                               rna_per_vr$week >= jaar_terug,],
+             aes(x = week, 
+                 y = rna/1e11,
+                 color = "Andere veiligheidsregio's")
+             )+
+  geom_line(data = rna_nl[rna_nl$week >= jaar_terug,], size = 3,
+            aes(x = week,
+                y = rna/1e11,
+                color = "Nederland")) +
+  geom_line(data = rna_per_vr[rna_per_vr$regio_code == regio_code_vr & 
+                               rna_per_vr$week >= jaar_terug,], size = 3,
+             aes(x = week,
+                 y = rna/1e11,
+                 color = paste(veiligheidsregio)
+                 ))+
+  xlab("")+
+  ylab("RNA-deeltjes per 100.000 inwoners (* 100 miljard)")+
+  scale_color_manual(name = "",values = legenda_lijngrafiek)+
+  theme_minimal()+
+  theme(legend.position = "bottom",
+        text = element_text(size = 15))
+```
+\newpage
+
+# Rioolwater: RNA-deeltjes per gemeente over tijd
+
+```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap=paste0("RNA-deeltjes Covid 19 in rioolwater over tijd per gemeente in ", veiligheidsregio,"."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
+#Facetted lijngrafiek over de laatste 6 weken met color-coding voor 'echtheid' data
+  #Alle weken in data
+  alle_weken <- unique(rna_per_gemeente_in_vr$week) %>% sort()
+  #6 weken voor laatste week
+  zes_weken_terug <- alle_weken[length(alle_weken)-5]
+  #vector met de afgelopen 6 weken
+  afgelopen_zes_weken <- alle_weken[alle_weken >= zes_weken_terug]
+
+  #Hoeveel rijen met plotjes moeten er komen? t/m 14 gemeenten zijn 2 rijen nog goed leesbaar. Anders 3 rijen.
+  n_rijen <- ifelse(length(unique(rna_per_gemeente_in_vr$regio_naam)) < 15, 2,3)
+  
+  rna_per_gemeente_in_vr$meting_vs_geimputeerd <- ifelse(rna_per_gemeente_in_vr$percentage_geimputeerd == 0,
+                                                         "Volledig o.b.v. meting","Deels o.b.v meting (%)")
+ 
+  
+ 
+  ggplot(data = rna_per_gemeente_in_vr[rna_per_gemeente_in_vr$week %in% afgelopen_zes_weken,], aes(group=regio_naam)) +
+    geom_line(aes(x = week, y = rna/1e11)) +
+    geom_point(aes(x = week, y = rna/1e11, col = meting_vs_geimputeerd), size = 2) +
+    #tekst met het percentage 'echte' data voor gemeente/week combinaties waarvan de gegevens niet volledig op metingen gebaseerd zijn.
+    geom_text(aes(x = week, y = (rna/1e11)+(max(rna/1e11)/6 ), label = ifelse(percentage_geimputeerd == 0,NA,
+                                                                                #Omzetten naar percentage 'echt'
+                                                                                100-percentage_geimputeerd)), 
+              stat = "identity", na.rm = T) +
+    facet_wrap(~regio_naam, nrow = n_rijen) +
+    ggtitle(paste("RNA in rioolwater per gemeente in", veiligheidsregio))+
+    
+    ylab("RNA-per 100.000 inwoners (*100 miljard)")+
+    xlab("")+
+    labs(caption = 
+    "Weekgemiddelden RNA-deeltjes omgerekend naar gemeenten. De blauwe bollen geven metingen aan in weken waar er van alle RWZI metingen beschikbaar waren.
+    De rode bollen zijn geannoteerd met het percentage gegevens dat op metingen gebaseerd is. Ontbrekende RWZI-gegevens op weekbasis zijn geimputeerd middels moving average 
+    (imputeTS::na_ma(rna, k = 2, weighting = 'simple')).")+
+    scale_colour_manual("Datakwaliteit", values =  c("Volledig o.b.v. meting" = unname(kleuren_ggd[1]), "Deels o.b.v meting (%)" = unname(kleuren_ggd[3])))+
+     coord_cartesian(ylim = c(0,(max(rna_per_gemeente_in_vr$rna[rna_per_gemeente_in_vr$week %in% afgelopen_zes_weken])/1e11)*1.1 ))+
+        theme_minimal()+
+    theme(text = element_text(size = 15),
+          axis.text.x = element_text(angle = 90),
+          plot.title =  element_text(hjust = 0.5),
+          plot.caption = element_text(hjust = 0.5, vjust = 1),
+          legend.position = "bottom",
+          legend.title =  element_text(face = "bold"),
+          axis.title = element_text(face = "bold",
+                                    size = 16))
+
+
+```
+\newpage 
+
+# Rioolwater en Ziekenhuisopnames: Vergelijking over tijd
+
+```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap=paste0("RNA-deeltjes Covid 19 in rioolwater over tijd vergeleken met ziekenhuisopnames over tijd (rechter Y-as) in ", veiligheidsregio,"."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
+
+#Ziekenhuisopnames_pw_invr
+ziekenhuisopnames_week_vr <- ziekenhuisopnames %>%
+  dplyr::filter(Security_region_name == veiligheidsregio) %>%
+  group_by(week)%>%
+  summarise(aantal = sum(Hospital_admission))
+
+#Mergen van ziekenhuis & rioolwaterdata
+ziekenhuis_en_rna <- rna_per_vr[rna_per_vr$regio_code == regio_code_vr,] %>%
+  left_join(ziekenhuisopnames_week_vr, by = "week")%>%
+  dplyr::select(week, rna, aantal)
+
+verschil_max_ziekenhuis <- max(ziekenhuis_en_rna$aantal, na.rm = T) / max(ziekenhuis_en_rna$rna/1e11, na.rm = T)
+
+
+
+#Lijngrafiek met gegevens voor veiligheidsregio
+ggplot(ziekenhuis_en_rna[ziekenhuis_en_rna$week >= jaar_terug,])+
+  geom_line(size = 3,aes(x = week,y = aantal/verschil_max_ziekenhuis,color = "Ziekenhuisopnames"))+
+  geom_line(size = 3,aes(x = week,y = rna/1e11,color = "RNA-deeltjes",))+
+  scale_color_manual(name = "",
+                    values = c("Ziekenhuisopnames" = unname(kleuren_ggd[3]),
+                               "RNA-deeltjes" = unname(kleuren_ggd[1])))+
+  scale_y_continuous(name = "RNA-deeltjes per 100.000 inwoners (* 100 miljard)",
+                    sec.axis = sec_axis(trans = ~.*verschil_max_ziekenhuis, name = "Ziekenhuisopnames"))+
+  xlab("")+
+  theme_minimal()+
+  theme(legend.position = "bottom",
+        text = element_text(size = 15))
+  
+
+
+
+
+```
+
+
+\newpage
+
+## Ziekenhuisopnames: Landkaart incidentie afgelopen 4 weken
+
+
+```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap=paste("Incidentie ziekenhuisopnames per gemeente in", veiligheidsregio ,"in de afgelopen 4 weken."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
+
+incidentie_ziekenhuisopames_gemeente_recent <- ziekenhuisopnames_per_gemeente_incidentie_per_week %>%
+  dplyr::filter(gemeente %in% gemeenten_in_vr$gm_naam,
+                week >= (vorige_week-21))%>%
+   tidyr::pivot_wider(id_cols = gemeente, values_from = incidentie, names_from = week)
+
+
+  #Polygoon en data mergen
+  kaart_besmettingen <- merge(x = gemeente_in_vr_sf,
+                        y = incidentie_ziekenhuisopames_gemeente_recent,
+                        by.x = "statnaam", 
+                        by.y = "gemeente")
+  
+  
+  tm_shape(kaart_besmettingen) +
+    tm_fill(col = paste(laatste_vier_weken),
+            #breaks = percentielen_data_recent,
+            title = "Ziekenhuisopnames: Incidentie per 100.000 inwoners per week",
+            legend.is.portrait = F)+
+    tm_borders() +
+    tm_facets(nrow = 2, free.scales = FALSE) +
+    tm_layout(
+              # legend.outside = TRUE,
+              legend.outside.position = "bottom",
+              legend.outside.size = 0.15,
+              legend.text.size = 5,
+              legend.title.size = 10,
+              legend.title.fontface = "bold",
+              panel.labels =  c(laatste_vier_weken),
+              panel.label.fontface = "bold",
+              panel.label.size = 2,
+              panel.label.color = "#FFFFFF",
+              panel.label.bg.color = "#53617F"
+              
+              )
+
+```
