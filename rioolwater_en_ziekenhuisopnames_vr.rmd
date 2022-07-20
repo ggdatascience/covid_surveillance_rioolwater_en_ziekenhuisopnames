@@ -281,6 +281,25 @@ classoption: landscape
 
 ```
 
+## Databronnen in deze rapportage:
+
+*RIVM:*
+
+- [Ziekenhuisopnames](https://data.rivm.nl/meta/srv/eng/catalog.search#/metadata/4f4ad069-8f24-4fe8-b2a7-533ef27a899f)
+
+- [Rioolwaterdata](https://data.rivm.nl/meta/srv/eng/catalog.search#/metadata/a2960b68-9d3f-4dc3-9485-600570cd52b9)
+
+*CBS:*
+
+- [cbsodataR: inwoners per gemeente (70072NED) & gemeenten per VR (84721NED)](https://cran.r-project.org/web/packages/cbsodataR/index.html)
+
+- [Inwoners per RWZI](https://www.cbs.nl/nl-nl/maatwerk/2021/06/inwoners-per-rioolwaterzuiveringsinstallatie-1-1-2021)
+
+- [Shapefile gemeenten NL](https://www.cbs.nl/nl-nl/reeksen/geografische-data)
+
+
+
+
 ---
 title: "Rioolwatersurveillance in `r veiligheidsregio`"
 subtitle: "voor de week van `r datum_uitschrijven(vorige_week)` t/m `r datum_uitschrijven(vorige_week+6)`"
@@ -289,7 +308,7 @@ subtitle: "voor de week van `r datum_uitschrijven(vorige_week)` t/m `r datum_uit
 
 \newpage
 
-# Rioolwater: Landkaart RNA-deeltjes per gemeente
+## Rioolwater: Landkaart RNA-deeltjes per gemeente
 ```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap=paste0("RNA-deeltjes in rioolwater (per 100.000 inwoners * honderd miljard) in ", veiligheidsregio,",per gemeente in de laatste 4 weken."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
 
 #Breaks zijn gebaseerd op percentielen van data van alle gemeenten in NL vanaf jan-2021
@@ -344,7 +363,7 @@ labels_percentielen <- do.call(rbind, labels_percentielen) %>% as.vector()
 
 \newpage
 
-# Rioolwater: RNA-deeltjes over tijd in Nederland, `r veiligheidsregio` en andere veiligheidsregios 
+## Rioolwater: RNA-deeltjes over tijd in Nederland, `r veiligheidsregio` en andere VR's 
 
 ```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap= paste("RNA-deeltjes Covid 19 in rioolwater over tijd voor Nederland (oranje),", veiligheidsregio,"(blauw) en andere veiligheidsregio's (gele stippen)."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
 
@@ -360,14 +379,18 @@ names(legenda_lijngrafiek) <- c("Nederland", paste(veiligheidsregio),"Andere vei
 ggplot()+
     geom_point(data = rna_per_vr[rna_per_vr$regio_code != regio_code_vr & 
                                rna_per_vr$week >= jaar_terug,],
-             aes(x = week,y = rna/1e11,color = "Andere veiligheidsregio's"))+
-             
+             aes(x = week, 
+                 y = rna/1e11,
+                 color = "Andere veiligheidsregio's"))+
   geom_line(data = rna_nl[rna_nl$week >= jaar_terug,], size = 3,
-            aes(x = week,y = rna/1e11,color = "Nederland")) +
-
+            aes(x = week,
+                y = rna/1e11,
+                color = "Nederland")) +
   geom_line(data = rna_per_vr[rna_per_vr$regio_code == regio_code_vr & 
                                rna_per_vr$week >= jaar_terug,], size = 3,
-             aes(x = week, y = rna/1e11, color = paste(veiligheidsregio)
+             aes(x = week,
+                 y = rna/1e11,
+                 color = paste(veiligheidsregio)
                  ))+
   xlab("")+
   ylab("RNA-deeltjes per 100.000 inwoners (* 100 miljard)")+
@@ -378,7 +401,7 @@ ggplot()+
 ```
 \newpage
 
-# Rioolwater: RNA-deeltjes per gemeente over tijd
+## Rioolwater: RNA-deeltjes per gemeente over tijd
 
 ```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap=paste0("RNA-deeltjes Covid 19 in rioolwater over tijd per gemeente in ", veiligheidsregio,"."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
 #Facetted lijngrafiek over de laatste 6 weken met color-coding voor 'echtheid' data
@@ -430,7 +453,7 @@ ggplot()+
 ```
 \newpage 
 
-# Rioolwater en Ziekenhuisopnames: Vergelijking over tijd
+## Rioolwater en Ziekenhuisopnames: Vergelijking over tijd
 
 ```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap=paste0("RNA-deeltjes Covid 19 in rioolwater over tijd vergeleken met ziekenhuisopnames over tijd (rechter Y-as) in ", veiligheidsregio,"."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
 
@@ -472,7 +495,7 @@ ggplot(ziekenhuis_en_rna[ziekenhuis_en_rna$week >= jaar_terug,])+
 
 \newpage
 
-# Ziekenhuisopnames: Landkaart incidentie afgelopen 4 weken
+## Ziekenhuisopnames: Landkaart incidentie afgelopen 4 weken
 
 ```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap=paste("Incidentie ziekenhuisopnames per gemeente in", veiligheidsregio ,"in de afgelopen 4 weken."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
 
@@ -491,6 +514,7 @@ incidentie_ziekenhuisopames_gemeente_recent <- ziekenhuisopnames_per_gemeente_in
   
   tm_shape(kaart_ziekenhuisopnames) +
     tm_fill(col = paste(laatste_vier_weken),
+            #breaks = percentielen_data_recent,
             title = "Ziekenhuisopnames: Incidentie per 100.000 inwoners per week",
             legend.is.portrait = F)+
     tm_borders() +
