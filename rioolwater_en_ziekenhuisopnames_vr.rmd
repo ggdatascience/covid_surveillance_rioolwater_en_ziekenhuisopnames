@@ -283,6 +283,7 @@ classoption: landscape
 
 ---
 title: "Rioolwatersurveillance in `r veiligheidsregio`"
+subtitle: "voor de week van `r datum_uitschrijven(vorige_week)` t/m `r datum_uitschrijven(vorige_week+6)`"
 ---
 
 
