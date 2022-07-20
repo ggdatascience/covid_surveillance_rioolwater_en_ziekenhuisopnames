@@ -1,6 +1,10 @@
 # covid_surveillance_rioolwater_en_ziekenhuisopnames
 Rmarkdown-script t.b.v Covid-19 surveillance van rioolwater &amp; ziekenhuisonpnames per veiligheidsregio o.b.v. RIVM-data
 
-![image](https://user-images.githubusercontent.com/44730789/180014065-af9e8d7d-f6cc-49c0-aced-c48e93daa4e0.png)
-![image](https://user-images.githubusercontent.com/44730789/180014178-adbb377c-8b6d-4778-b549-8d7a89921ee8.png)
-![image](https://user-images.githubusercontent.com/44730789/180014245-22fc33af-538b-4cf1-abe0-aa708c582838.png)
+Afbeeldingen zijn ter illustratie en laten resultaten zien van veiligheidsregio Gelderland-Zuid & rapportageperiode 11 juli 2022  
+
+![image](https://user-images.githubusercontent.com/44730789/180014485-66539fcd-8381-4a0a-9f41-3e78fcd2d8c7.png)
+![image](https://user-images.githubusercontent.com/44730789/180014547-788d7f2a-41c9-4fb6-8dc5-b992768e6510.png)
+![image](https://user-images.githubusercontent.com/44730789/180014610-a17f0e1c-6f89-4c77-9edd-b6bc4b9b291a.png)
+![image](https://user-images.githubusercontent.com/44730789/180014663-3846a628-95cd-4aa1-97cb-95da5e525415.png)
+![image](https://user-images.githubusercontent.com/44730789/180014709-c16fe080-9780-4491-8ada-49ffe8f8224c.png)
