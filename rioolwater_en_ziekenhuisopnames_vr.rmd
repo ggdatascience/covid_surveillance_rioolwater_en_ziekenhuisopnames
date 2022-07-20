@@ -359,19 +359,14 @@ names(legenda_lijngrafiek) <- c("Nederland", paste(veiligheidsregio),"Andere vei
 ggplot()+
     geom_point(data = rna_per_vr[rna_per_vr$regio_code != regio_code_vr & 
                                rna_per_vr$week >= jaar_terug,],
-             aes(x = week, 
-                 y = rna/1e11,
-                 color = "Andere veiligheidsregio's")
-             )+
+             aes(x = week,y = rna/1e11,color = "Andere veiligheidsregio's"))+
+             
   geom_line(data = rna_nl[rna_nl$week >= jaar_terug,], size = 3,
-            aes(x = week,
-                y = rna/1e11,
-                color = "Nederland")) +
+            aes(x = week,y = rna/1e11,color = "Nederland")) +
+
   geom_line(data = rna_per_vr[rna_per_vr$regio_code == regio_code_vr & 
                                rna_per_vr$week >= jaar_terug,], size = 3,
-             aes(x = week,
-                 y = rna/1e11,
-                 color = paste(veiligheidsregio)
+             aes(x = week, y = rna/1e11, color = paste(veiligheidsregio)
                  ))+
   xlab("")+
   ylab("RNA-deeltjes per 100.000 inwoners (* 100 miljard)")+
@@ -487,15 +482,14 @@ incidentie_ziekenhuisopames_gemeente_recent <- ziekenhuisopnames_per_gemeente_in
 
 
   #Polygoon en data mergen
-  kaart_besmettingen <- merge(x = gemeente_in_vr_sf,
+  kaart_ziekenhuisopnames <- merge(x = gemeente_in_vr_sf,
                         y = incidentie_ziekenhuisopames_gemeente_recent,
                         by.x = "statnaam", 
                         by.y = "gemeente")
   
   
-  tm_shape(kaart_besmettingen) +
+  tm_shape(kaart_ziekenhuisopnames) +
     tm_fill(col = paste(laatste_vier_weken),
-            #breaks = percentielen_data_recent,
             title = "Ziekenhuisopnames: Incidentie per 100.000 inwoners per week",
             legend.is.portrait = F)+
     tm_borders() +
