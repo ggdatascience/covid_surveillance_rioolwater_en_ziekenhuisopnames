@@ -1,5 +1,5 @@
 # covid_surveillance_rioolwater_en_ziekenhuisopnames
-Rmarkdown-script t.b.v Covid-19 surveillance van rioolwater &amp; ziekenhuisonpnames per veiligheidsregio o.b.v. RIVM-data
+Rmarkdown-script voor Covid-19 surveillance van rioolwater &amp; ziekenhuisopnames per veiligheidsregio o.b.v. RIVM-data
 
 Afbeeldingen zijn ter illustratie en laten resultaten zien van veiligheidsregio Gelderland-Zuid & rapportageperiode 11 juli 2022  
 
