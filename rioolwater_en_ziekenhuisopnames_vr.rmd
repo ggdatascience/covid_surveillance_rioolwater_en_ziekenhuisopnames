@@ -17,11 +17,11 @@ classoption: landscape
 ## met bijdragen van Leonard van Brabant (LvB, GGD HvB)  
 
 
-# In dit script worden RIVM gegevens opgehaald mbt RNA deeltjes corona in RWZI
-# Script bevat code om gegevens op kaartjes Gemeente en VR te analyseren. 
-# Het is RWZI-gegevens naar pc-4 niveau om te rekenen. Dat wordt hier niet gedaan.
+# In dit script worden o.a. RIVM gegevens opgehaald mbt RNA deeltjes corona in RWZI
+# Script bevat code om RWZI-gegevens op kaartjes Gemeente en VR te analyseren. 
+# Het mogelijk is RWZI-gegevens naar pc-4 niveau om te rekenen. Dat wordt hier niet gedaan.
 
-# We volgen voor een het omrekenen naar regio de rekenmethode van het RIVM; deze wordt hier uitgelegd:
+# We volgen voor een het omrekenen naar regio de rekenmethode van het RIVM. Deze methode wordt hier uitgelegd:
 # https://www.rivm.nl/documenten/berekening-cijfers-rioolwatermetingen-covid-19
 
 # Alle benodigde databronnen kunnen IN het script gedownload worden 
