@@ -72,7 +72,8 @@ classoption: landscape
   }
 
   #Maandag van vorige week vastleggen o.b.v. sys.Date()-7
-  vorige_week <- floor_date(Sys.Date()-7,"week", week_start = getOption("lubridate.week.start",1))
+  #Gegevens van huidige week worden verwijderd.
+   vorige_week <- floor_date(Sys.Date()-7,"week", week_start = getOption("lubridate.week.start",1))
 
 #2: Gegevens lezen
     
@@ -104,9 +105,11 @@ classoption: landscape
     colnames(inwoners_per_gemeente) <- c("gemeente","inwoners")
 
     #Ziekenhuisopnames RIVM
-      ziekenhuisopnames <- read.csv("https://data.rivm.nl/covid-19/COVID-19_ziekenhuisopnames.csv",";", header = T)%>%
+      ziekenhuisopnames <- read.csv("https://data.rivm.nl/covid-19/COVID-19_ziekenhuisopnames.csv",";", header = T,encoding = "UTF-8")%>%
         mutate(week = floor_date(as.Date(Date_of_statistics), "week" , week_start=getOption("lubridate.week.start",1)),
-                gemeente = Municipality_name)
+                gemeente = Municipality_name)%>%
+        #gegevens nieuwer dan vorige_week verwijderen
+        dplyr::filter(week <= vorige_week)
       
       ziekenhuisopnames_per_gemeente_incidentie_per_week <- ziekenhuisopnames%>%
         group_by(week, gemeente)%>%
@@ -124,6 +127,8 @@ classoption: landscape
         #Maak variabele 'week'; datum van 1e dag van de week waarin gegevens zijn gemeten
         mutate(week = floor_date(as.Date(Date_measurement),
                                "week",week_start=getOption("lubridate.week.start", 1)))%>%
+        #gegevens van huidige week verwijderen
+        dplyr::filter(week <= vorige_week)%>%
         group_by(week, RWZI_AWZI_code)%>%
         #Neem weekgem. per station 
         summarise(RNA_flow_per_100000 = mean(RNA_flow_per_100000, na.rm = T))%>%
@@ -160,13 +165,15 @@ classoption: landscape
         #Op basis van simulatie is simple ma de beste imputatiemethode
         mutate(rna = imputeTS::na_ma(RNA_flow_per_100000, k = 2, weighting = "simple")) %>%
         dplyr::select(-RNA_flow_per_100000)
+        
       
             
       #Inwoners per verzorgingsgebied RWZI downloaden van CBS
       
       #Let op! gegevens van 2021 worden gedownload. Op moment van schrijven zijn dit de meest actuele gegevens. 
       #Moet bijgewerkt worden wanneer CBS gegevens bijwerkt worden. 
-      if(!file.exists("Inwoners_per_verzorgingsgebied.xlsx")){
+   
+     if(!file.exists("Inwoners_per_verzorgingsgebied.xlsx")){
         download.file("https://www.cbs.nl/-/media/_excel/2021/39/20210930-aantal-inwoners-per-verzorgingsgebied-2021.xlsx",
                       destfile = "Inwoners_per_verzorgingsgebied.xlsx",
                       mode = "wb")
@@ -309,7 +316,7 @@ subtitle: "voor de week van `r datum_uitschrijven(vorige_week)` t/m `r datum_uit
 \newpage
 
 ## Rioolwater: Landkaart RNA-deeltjes per gemeente
-```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap=paste0("RNA-deeltjes in rioolwater (per 100.000 inwoners * honderd miljard) in ", veiligheidsregio,",per gemeente in de laatste 4 weken."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
+```{r, echo=FALSE, crop=T, warning=FALSE, fig.cap=paste0("RNA-deeltjes in rioolwater (per 100.000 inwoners * honderd miljard) in ", veiligheidsregio,", per gemeente in de laatste 4 weken."),fig.width=15, fig.height=7, out.height="100%", out.width= "100%"}
 
 #Breaks zijn gebaseerd op percentielen van data van alle gemeenten in NL vanaf jan-2021
 percentielen <- c(0,round(quantile(rna_per_gemeente$rna[rna_per_gemeente$week >= "01-01-2021"]/1e11,
@@ -348,9 +355,9 @@ labels_percentielen <- do.call(rbind, labels_percentielen) %>% as.vector()
     tm_facets(nrow = 2, free.scales = FALSE) +
     tm_layout(# legend.outside = TRUE,
               legend.outside.position = "bottom",
-              legend.outside.size = 0.15,
+              legend.outside.size = 0.1,
               legend.text.size = 5,
-              legend.title.size = 20,
+              legend.title.size = 10,
               legend.title.fontface = "bold",
               panel.labels =  c(laatste_vier_weken),
               panel.label.fontface = "bold",
@@ -522,7 +529,7 @@ incidentie_ziekenhuisopames_gemeente_recent <- ziekenhuisopnames_per_gemeente_in
     tm_layout(
               # legend.outside = TRUE,
               legend.outside.position = "bottom",
-              legend.outside.size = 0.15,
+              legend.outside.size = 0.1,
               legend.text.size = 5,
               legend.title.size = 10,
               legend.title.fontface = "bold",
